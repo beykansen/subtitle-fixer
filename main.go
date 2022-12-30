@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"unicode/utf8"
 
 	"github.com/djimenez/iconv-go"
 )
@@ -33,6 +34,7 @@ func main() {
 		panic("path is missing")
 	}
 
+	count := 0
 	err := filepath.Walk(*subtitlesPath,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -41,38 +43,50 @@ func main() {
 			if info.IsDir() || filepath.Ext(path) != ".srt" {
 				return nil
 			}
-
-			return converter.Covert(path)
+			fixed, err := converter.Covert(path)
+			if fixed {
+				count++
+			}
+			return err
 		})
 
 	if err != nil {
 		panic(err)
 	}
-	log.Println("All subtitles fixed!")
+	log.Printf("%d Subtitles Fixed!", count)
 }
 
-func (sc *SubtitleConverter) Covert(filename string) error {
+func (sc *SubtitleConverter) Covert(filename string) (bool, error) {
 	file, err := os.OpenFile(filename, os.O_RDWR, 0644)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 	inputBuffer, err := io.ReadAll(file)
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	alreadyFixed := utf8.Valid(inputBuffer)
+	if alreadyFixed {
+		return false, nil
 	}
 
 	outputBuffer := make([]byte, len(inputBuffer)*2)
 	_, _, err = sc.converter.Convert(inputBuffer, outputBuffer)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	cleanedOutputBuffer := bytes.Trim(outputBuffer, "\x00")
 	_, err = file.WriteAt(cleanedOutputBuffer, 0)
-	return err
+	if err != nil {
+		return false, err
+	}
+	log.Printf("%s fixed.\n", filename)
+	return true, nil
 }
 
 func (sc *SubtitleConverter) Close() {
