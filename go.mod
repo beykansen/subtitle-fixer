@@ -1,4 +1,4 @@
-module subtitle-fixer
+module github.com/beykansen/subtitle-fixer
 
 go 1.19
 
